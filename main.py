@@ -32,6 +32,8 @@ EXAMPLES:
 """
 
 import argparse
+import socket
+import subprocess
 import sys
 import os
 from datetime import datetime
@@ -108,6 +110,7 @@ def parse_args():
     out.add_argument("-o", "--output", default="results")
     out.add_argument("--no-save",      action="store_true", help="Don't save reports")
     out.add_argument("--no-html",      action="store_true", help="Skip HTML report generation")
+    out.add_argument("--force",        action="store_true", help="Skip connectivity check (use if target blocks all probes)")
 
     return parser.parse_args()
 
@@ -123,6 +126,70 @@ def parse_ports(port_range_str: str) -> list[int]:
             ports.append(int(part))
     return sorted(set(ports))
 
+
+
+def check_connectivity(target: str, timeout: int = 5) -> bool:
+    """
+    Check if the target is reachable before starting the scan.
+    Tries TCP connect on common ports + ICMP ping.
+    If nothing responds within timeout, warn and abort.
+    """
+    from utils.output import print_info, print_error, print_warn
+    from colorama import Fore, Style
+
+    print_info(f"Checking connectivity to {target}...")
+
+    # Step 1: DNS resolution check (for domain targets)
+    ip = target
+    if not target.replace(".", "").isdigit():
+        try:
+            ip = socket.gethostbyname(target)
+            print_info(f"Resolved {target} → {ip}")
+        except socket.gaierror:
+            print_error(f"Cannot resolve hostname: {target}")
+            print_warn("Possible causes:")
+            print_warn("  • You are not connected to VPN (TryHackMe/HackTheBox)")
+            print_warn("  • The domain does not exist")
+            print_warn("  • DNS is blocked on your network")
+            return False
+
+    # Step 2: Try TCP connect on common ports
+    probe_ports = [80, 443, 22, 21, 8080, 8443, 3389]
+    for port in probe_ports:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            result = sock.connect_ex((ip, port))
+            sock.close()
+            if result == 0:
+                print_info(f"Target is reachable (port {port} responded) ✅")
+                return True
+        except Exception:
+            continue
+
+    # Step 3: Try ICMP ping as last resort
+    try:
+        ping_cmd = ["ping", "-c", "1", "-W", str(timeout), ip]
+        result = subprocess.run(ping_cmd, capture_output=True, timeout=timeout + 2)
+        if result.returncode == 0:
+            print_info(f"Target is reachable (ping responded) ✅")
+            return True
+    except Exception:
+        pass
+
+    # Nothing responded
+    print_error(f"\n  Target {target} ({ip}) is NOT reachable!")
+    print()
+    print(f"  {Fore.YELLOW}Possible causes:{Style.RESET_ALL}")
+    print(f"  {Fore.RED}  ❌ VPN not connected{Style.RESET_ALL} — Did you activate OpenVPN for TryHackMe/HackTheBox?")
+    print(f"  {Fore.RED}  ❌ Wrong IP address{Style.RESET_ALL} — Double check the target IP in the platform")
+    print(f"  {Fore.RED}  ❌ Target machine is off{Style.RESET_ALL} — Start/reset the machine on the platform")
+    print(f"  {Fore.RED}  ❌ Firewall blocking{Style.RESET_ALL} — Target may block all probes (try --force to skip this check)")
+    print()
+    print(f"  {Fore.CYAN}TryHackMe VPN:{Style.RESET_ALL}  sudo openvpn ~/Downloads/your-vpn-file.ovpn")
+    print(f"  {Fore.CYAN}HackTheBox VPN:{Style.RESET_ALL} sudo openvpn ~/Downloads/lab_username.ovpn")
+    print()
+    return False
 
 def main():
     print_banner()
@@ -147,6 +214,14 @@ def main():
     print_info(f"Started  : {timestamp}")
     print_info(f"Web port : {args.web_port} ({'HTTPS' if use_https else 'HTTP'})")
     print_warn("REMINDER : Only scan targets you are authorized to test!\n")
+
+    # ── CONNECTIVITY CHECK ────────────────────────────────────────────────────
+    if not args.force:
+        if not check_connectivity(target):
+            print_error("Scan aborted. Fix connectivity and try again.")
+            print_warn("Use --force to skip this check (not recommended).")
+            sys.exit(1)
+        print()
 
     results = {
         "target":         target,
