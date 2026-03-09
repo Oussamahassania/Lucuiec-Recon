@@ -1,23 +1,34 @@
 #!/usr/bin/env python3
 """
-ReconTool — Subdomain + Port + Directory Scanner
-For educational use on authorized targets (TryHackMe, HackTheBox, etc.)
+ReconTool v2.0 — Advanced Bug Bounty Recon Framework
+For authorized security testing on TryHackMe, HackTheBox, and permitted targets.
 
-Usage examples:
-  Full scan:
+MODULES:
+  1. Subdomain Enumeration    — DNS brute-force + crt.sh passive recon
+  2. Port & Service Scanning  — TCP scan + nmap version detection
+  3. Directory Discovery      — Async HTTP brute-force
+  4. Technology Fingerprint   — Server/framework/WAF/CMS detection
+  5. CVE Correlation          — Auto NVD lookup for detected service versions
+  6. JS File Mining           — Extract secrets/endpoints from JavaScript
+  7. Sensitive File Hunter    — .env, backups, git, keys, configs
+  8. Parameter Discovery      — Hidden GET/POST parameter detection
+  9. HTML Report              — Professional color-coded report
+
+EXAMPLES:
+  Full offensive scan:
     python main.py -t 10.10.10.5 --all
 
-  Subdomain only:
-    python main.py -t example.com --subdomains
+  Web-focused (fingerprint + JS + sensitive files + params):
+    python main.py -t 10.10.10.5 --fingerprint --js --sensitive --params
 
-  Port scan with full range:
-    python main.py -t 10.10.10.5 --ports --port-range 1-65535
+  Port scan + CVE lookup:
+    python main.py -t 10.10.10.5 --ports --cve
 
-  Directory scan on custom port:
-    python main.py -t 10.10.10.5 --dirs --web-port 8080
+  Custom ports + web scan:
+    python main.py -t 10.10.10.5 --ports --port-range 1-10000 --dirs --web-port 8080
 
-  Combined:
-    python main.py -t 10.10.10.5 --ports --dirs --no-nmap
+  Quick scan (no nmap, no CVE):
+    python main.py -t 10.10.10.5 --ports --dirs --no-nmap --no-cve
 """
 
 import argparse
@@ -25,85 +36,83 @@ import sys
 import os
 from datetime import datetime
 
-# Make sure we can import from sibling directories
 sys.path.insert(0, os.path.dirname(__file__))
 
 from utils.output import (
     print_banner, print_info, print_error, print_warn,
     print_section, print_summary, save_results
 )
-import modules.subdomain as subdomain_module
-import modules.portscan as portscan_module
-import modules.dirscan as dirscan_module
+from utils.html_report import save_html_report
+
+import modules.subdomain       as subdomain_module
+import modules.portscan        as portscan_module
+import modules.dirscan         as dirscan_module
+import modules.fingerprint     as fingerprint_module
+import modules.cve_lookup      as cve_module
+import modules.js_miner        as js_module
+import modules.sensitive_files as sensitive_module
+import modules.param_discovery as param_module
 
 
-# ─── Default Wordlists (bundled with tool) ────────────────────────────────
 DEFAULT_SUBDOMAINS_WORDLIST = "wordlists/subdomains.txt"
 DEFAULT_DIRS_WORDLIST       = "wordlists/directories.txt"
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="ReconTool — Educational Recon Framework",
+        description="ReconTool v2.0 — Advanced Bug Bounty Recon Framework",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__
+        epilog=__doc__,
     )
 
-    # ── Target ──
-    parser.add_argument(
-        "-t", "--target", required=True,
-        help="Target domain or IP (e.g. 10.10.10.5 or example.com)"
-    )
+    # ── Target ──────────────────────────────────────────────────────────────
+    parser.add_argument("-t", "--target", required=True,
+                        help="Target domain or IP (e.g. 10.10.10.5 or example.com)")
 
-    # ── Scan Modules ──
-    parser.add_argument("--all",        action="store_true", help="Run ALL modules")
-    parser.add_argument("--subdomains", action="store_true", help="Run subdomain enumeration")
-    parser.add_argument("--ports",      action="store_true", help="Run port scanning")
-    parser.add_argument("--dirs",       action="store_true", help="Run directory discovery")
+    # ── Module Selection ─────────────────────────────────────────────────────
+    mods = parser.add_argument_group("Scan Modules")
+    mods.add_argument("--all",         action="store_true", help="Run ALL modules")
+    mods.add_argument("--subdomains",  action="store_true", help="Subdomain enumeration")
+    mods.add_argument("--ports",       action="store_true", help="Port + service scanning")
+    mods.add_argument("--dirs",        action="store_true", help="Directory discovery")
+    mods.add_argument("--fingerprint", action="store_true", help="Technology fingerprinting")
+    mods.add_argument("--cve",         action="store_true", help="CVE correlation (requires --ports)")
+    mods.add_argument("--js",          action="store_true", help="JavaScript file mining")
+    mods.add_argument("--sensitive",   action="store_true", help="Sensitive file hunter")
+    mods.add_argument("--params",      action="store_true", help="Hidden parameter discovery")
 
-    # ── Subdomain Options ──
+    # ── Subdomain Options ────────────────────────────────────────────────────
     sub = parser.add_argument_group("Subdomain Options")
-    sub.add_argument("--sub-wordlist", default=DEFAULT_SUBDOMAINS_WORDLIST,
-                     help=f"Subdomain wordlist (default: {DEFAULT_SUBDOMAINS_WORDLIST})")
-    sub.add_argument("--no-passive", action="store_true",
-                     help="Skip crt.sh passive recon")
-    sub.add_argument("--sub-threads", type=int, default=50,
-                     help="Threads for subdomain brute-force (default: 50)")
+    sub.add_argument("--sub-wordlist", default=DEFAULT_SUBDOMAINS_WORDLIST)
+    sub.add_argument("--no-passive",   action="store_true", help="Skip crt.sh")
+    sub.add_argument("--sub-threads",  type=int, default=50)
 
-    # ── Port Scan Options ──
+    # ── Port Options ──────────────────────────────────────────────────────────
     port = parser.add_argument_group("Port Scan Options")
-    port.add_argument("--port-range", default=None,
-                      help="Port range e.g. 1-1000 or specific ports: 22,80,443")
-    port.add_argument("--port-threads", type=int, default=100,
-                      help="Threads for port scanning (default: 100)")
-    port.add_argument("--no-nmap", action="store_true",
-                      help="Skip nmap service detection (faster, less info)")
+    port.add_argument("--port-range",   default=None, help="e.g. 1-1000 or 22,80,443")
+    port.add_argument("--port-threads", type=int, default=100)
+    port.add_argument("--no-nmap",      action="store_true", help="Skip nmap service detection")
+    port.add_argument("--no-cve",       action="store_true", help="Skip CVE lookup after port scan")
 
-    # ── Directory Scan Options ──
-    dirs = parser.add_argument_group("Directory Scan Options")
-    dirs.add_argument("--dir-wordlist", default=DEFAULT_DIRS_WORDLIST,
-                      help=f"Directory wordlist (default: {DEFAULT_DIRS_WORDLIST})")
-    dirs.add_argument("--web-port", type=int, default=80,
-                      help="Web server port (default: 80)")
-    dirs.add_argument("--https", action="store_true",
-                      help="Use HTTPS instead of HTTP")
-    dirs.add_argument("--dir-threads", type=int, default=50,
-                      help="Concurrent requests for dir scan (default: 50)")
-    dirs.add_argument("--extensions", default=None,
-                      help="Comma-separated file extensions: .php,.txt,.bak")
+    # ── Web Options (shared by dirs/js/sensitive/params/fingerprint) ──────────
+    web = parser.add_argument_group("Web Options (dirs, js, sensitive, params, fingerprint)")
+    web.add_argument("--web-port",    type=int, default=80)
+    web.add_argument("--https",       action="store_true")
+    web.add_argument("--dir-wordlist", default=DEFAULT_DIRS_WORDLIST)
+    web.add_argument("--dir-threads",  type=int, default=50)
+    web.add_argument("--extensions",   default=None, help="e.g. .php,.txt,.bak")
+    web.add_argument("--param-paths",  default="/", help="Paths for param discovery, comma-separated")
 
-    # ── Output ──
+    # ── Output ────────────────────────────────────────────────────────────────
     out = parser.add_argument_group("Output Options")
-    out.add_argument("-o", "--output", default="results",
-                     help="Output directory for reports (default: results/)")
-    out.add_argument("--no-save", action="store_true",
-                     help="Don't save results to file")
+    out.add_argument("-o", "--output", default="results")
+    out.add_argument("--no-save",      action="store_true", help="Don't save reports")
+    out.add_argument("--no-html",      action="store_true", help="Skip HTML report generation")
 
     return parser.parse_args()
 
 
 def parse_ports(port_range_str: str) -> list[int]:
-    """Parse --port-range argument: supports ranges (1-1000) and lists (22,80,443)"""
     ports = []
     for part in port_range_str.split(","):
         part = part.strip()
@@ -119,36 +128,39 @@ def main():
     print_banner()
     args = parse_args()
 
-    # If --all, enable all modules
+    # --all enables everything
     if args.all:
-        args.subdomains = True
-        args.ports = True
-        args.dirs = True
+        args.subdomains = args.ports = args.dirs = True
+        args.fingerprint = args.js = args.sensitive = args.params = True
+        # CVE runs automatically after ports unless --no-cve
 
-    # Must select at least one module
-    if not any([args.subdomains, args.ports, args.dirs]):
-        print_error("No module selected! Use --subdomains, --ports, --dirs, or --all")
-        print_info("Run with --help for usage examples.")
+    if not any([args.subdomains, args.ports, args.dirs, args.fingerprint,
+                args.js, args.sensitive, args.params, args.cve]):
+        print_error("No module selected! Use --all or pick modules. Run --help for examples.")
         sys.exit(1)
 
-    target = args.target.strip()
+    target    = args.target.strip()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    use_https = args.https or args.web_port == 443
 
-    print_info(f"Target  : {target}")
-    print_info(f"Started : {timestamp}")
-    print_warn("REMINDER: Only scan targets you are authorized to test!")
-    print()
+    print_info(f"Target   : {target}")
+    print_info(f"Started  : {timestamp}")
+    print_info(f"Web port : {args.web_port} ({'HTTPS' if use_https else 'HTTP'})")
+    print_warn("REMINDER : Only scan targets you are authorized to test!\n")
 
-    # ── Aggregate Results ────────────────────────────────────────────────
     results = {
-        "target": target,
-        "timestamp": timestamp,
-        "subdomains": [],
-        "ports": {},
-        "directories": [],
+        "target":         target,
+        "timestamp":      timestamp,
+        "subdomains":     [],
+        "ports":          {},
+        "directories":    [],
+        "technology":     {},
+        "js_mining":      {},
+        "sensitive_files":[],
+        "parameters":     [],
     }
 
-    # ── Module 1: Subdomain Enumeration ─────────────────────────────────
+    # ── 1. SUBDOMAIN ENUMERATION ─────────────────────────────────────────────
     if args.subdomains:
         print_section("🌐 MODULE 1: SUBDOMAIN ENUMERATION")
         results["subdomains"] = subdomain_module.run(
@@ -157,17 +169,16 @@ def main():
             threads=args.sub_threads,
             passive=not args.no_passive,
         )
-        print_info(f"Total subdomains found: {len(results['subdomains'])}")
+        print_info(f"Subdomains found: {len(results['subdomains'])}")
 
-    # ── Module 2: Port & Service Scanning ────────────────────────────────
+    # ── 2. PORT & SERVICE SCANNING ───────────────────────────────────────────
     if args.ports:
         print_section("🔌 MODULE 2: PORT & SERVICE SCANNING")
-
         ports = None
         if args.port_range:
             try:
                 ports = parse_ports(args.port_range)
-                print_info(f"Scanning {len(ports)} specified ports.")
+                print_info(f"Scanning {len(ports)} ports.")
             except ValueError:
                 print_error(f"Invalid port range: {args.port_range}")
                 sys.exit(1)
@@ -178,18 +189,34 @@ def main():
             threads=args.port_threads,
             deep=not args.no_nmap,
         )
-        print_info(f"Open ports found: {results['ports'].get('open_ports', [])}")
+        print_info(f"Open ports: {results['ports'].get('open_ports', [])}")
 
-    # ── Module 3: Directory Discovery ────────────────────────────────────
+    # ── 3. CVE CORRELATION ───────────────────────────────────────────────────
+    run_cve = (args.cve or (args.ports and not args.no_cve))
+    if run_cve:
+        print_section("🔴 MODULE 3: CVE CORRELATION")
+        services = results["ports"].get("services", [])
+        if services:
+            enriched = cve_module.run(services)
+            results["ports"]["services"] = enriched
+        else:
+            print_warn("No service data for CVE lookup. Run --ports without --no-nmap first.")
+
+    # ── 4. TECHNOLOGY FINGERPRINTING ─────────────────────────────────────────
+    if args.fingerprint:
+        print_section("🖥️  MODULE 4: TECHNOLOGY FINGERPRINTING")
+        results["technology"] = fingerprint_module.run(
+            target=target,
+            port=args.web_port,
+            use_https=use_https,
+        )
+
+    # ── 5. DIRECTORY DISCOVERY ───────────────────────────────────────────────
     if args.dirs:
-        print_section("📁 MODULE 3: DIRECTORY & FILE DISCOVERY")
-
+        print_section("📁 MODULE 5: DIRECTORY DISCOVERY")
         extensions = None
         if args.extensions:
             extensions = [e.strip() for e in args.extensions.split(",")]
-
-        # Auto-detect HTTPS from port
-        use_https = args.https or args.web_port == 443
 
         results["directories"] = dirscan_module.run(
             target=target,
@@ -199,13 +226,46 @@ def main():
             extensions=extensions,
             concurrency=args.dir_threads,
         )
-        print_info(f"Paths/files found: {len(results['directories'])}")
+        print_info(f"Directories/files found: {len(results['directories'])}")
 
-    # ── Summary & Save ────────────────────────────────────────────────────
+    # ── 6. SENSITIVE FILE HUNTER ─────────────────────────────────────────────
+    if args.sensitive:
+        print_section("🔑 MODULE 6: SENSITIVE FILE HUNTER")
+        results["sensitive_files"] = sensitive_module.run(
+            target=target,
+            port=args.web_port,
+            use_https=use_https,
+        )
+
+    # ── 7. JAVASCRIPT MINING ─────────────────────────────────────────────────
+    if args.js:
+        print_section("⚙️  MODULE 7: JAVASCRIPT FILE MINING")
+        results["js_mining"] = js_module.run(
+            target=target,
+            port=args.web_port,
+            use_https=use_https,
+        )
+
+    # ── 8. PARAMETER DISCOVERY ───────────────────────────────────────────────
+    if args.params:
+        print_section("🎯 MODULE 8: PARAMETER DISCOVERY")
+        paths = [p.strip() for p in args.param_paths.split(",")]
+        results["parameters"] = param_module.run(
+            target=target,
+            paths=paths,
+            port=args.web_port,
+            use_https=use_https,
+        )
+
+    # ── SUMMARY & SAVE ────────────────────────────────────────────────────────
     print_summary(results)
 
     if not args.no_save:
         save_results(results, output_dir=args.output)
+        if not args.no_html:
+            html_path = save_html_report(results, output_dir=args.output)
+            from utils.output import print_found
+            print_found(f"HTML report:       {html_path}")
 
     print_info("Scan complete. Happy hacking (ethically)! 🎯")
 
