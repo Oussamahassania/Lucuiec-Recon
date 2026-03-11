@@ -16,7 +16,8 @@ import asyncio
 import threading
 import sys
 import time
-from lucuiec_recon.utils.output import print_found, print_info, print_error, print_warn
+from urllib.parse import urljoin
+from utils.output import print_found, print_info, print_error, print_warn
 
 _lock          = threading.Lock()
 _counter_lock  = threading.Lock()
@@ -180,12 +181,18 @@ async def _async_scan_url(
         "Accept-Encoding": "gzip, deflate",
     }
 
-    # Use HTTP/2 for speed if available
+    # Try HTTP/2 for speed, fall back to HTTP/1.1 if h2 not installed
+    try:
+        import h2  # noqa
+        use_http2 = True
+    except ImportError:
+        use_http2 = False
+
     async with httpx.AsyncClient(
         headers  = headers,
         timeout  = httpx.Timeout(connect=3.0, read=5.0, write=3.0, pool=3.0),
         verify   = False,
-        http2    = True,
+        http2    = use_http2,
         limits   = httpx.Limits(
             max_connections      = concurrency,
             max_keepalive_connections = concurrency,

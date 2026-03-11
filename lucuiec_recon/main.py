@@ -62,8 +62,9 @@ import modules.api_fuzzer      as api_module
 import modules.vuln_scanner    as vuln_module
 
 
-DEFAULT_SUBDOMAINS_WORDLIST = "wordlists/subdomains.txt"
-DEFAULT_DIRS_WORDLIST       = "wordlists/directories.txt"
+_HERE = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_SUBDOMAINS_WORDLIST = os.path.join(_HERE, "wordlists", "subdomains.txt")
+DEFAULT_DIRS_WORDLIST       = os.path.join(_HERE, "wordlists", "directories.txt")
 
 
 def parse_args():
