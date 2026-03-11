@@ -7,7 +7,7 @@ import dns.resolver
 import requests
 import concurrent.futures
 import threading
-from utils.output import print_found, print_info, print_error
+from lucuiec_recon.utils.output import print_found, print_info, print_error
 
 # Thread-safe results list
 _lock = threading.Lock()

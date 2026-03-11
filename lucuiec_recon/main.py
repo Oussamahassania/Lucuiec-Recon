@@ -54,6 +54,12 @@ import modules.cve_lookup      as cve_module
 import modules.js_miner        as js_module
 import modules.sensitive_files as sensitive_module
 import modules.param_discovery as param_module
+import modules.vhost_fuzzer    as vhost_module
+import modules.cors_scanner    as cors_module
+import modules.crawler         as crawler_module
+import modules.wayback         as wayback_module
+import modules.api_fuzzer      as api_module
+import modules.vuln_scanner    as vuln_module
 
 
 DEFAULT_SUBDOMAINS_WORDLIST = "wordlists/subdomains.txt"
@@ -62,7 +68,7 @@ DEFAULT_DIRS_WORDLIST       = "wordlists/directories.txt"
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="ReconTool v2.0 — Advanced Bug Bounty Recon Framework",
+        description="ReconTool v3.0 — Ultimate Web Hacking Recon Framework",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -82,6 +88,12 @@ def parse_args():
     mods.add_argument("--js",          action="store_true", help="JavaScript file mining")
     mods.add_argument("--sensitive",   action="store_true", help="Sensitive file hunter")
     mods.add_argument("--params",      action="store_true", help="Hidden parameter discovery")
+    mods.add_argument("--vhost",       action="store_true", help="Virtual host fuzzing")
+    mods.add_argument("--cors",        action="store_true", help="CORS misconfiguration scanner")
+    mods.add_argument("--crawl",       action="store_true", help="Web crawler + URL finder")
+    mods.add_argument("--wayback",     action="store_true", help="Wayback Machine historical URLs")
+    mods.add_argument("--api",         action="store_true", help="API endpoint fuzzer")
+    mods.add_argument("--vulns",       action="store_true", help="Vulnerability scanner (SQLi/XSS/LFI/Redirect)")
 
     # ── Subdomain Options ────────────────────────────────────────────────────
     sub = parser.add_argument_group("Subdomain Options")
@@ -101,9 +113,15 @@ def parse_args():
     web.add_argument("--web-port",    type=int, default=80)
     web.add_argument("--https",       action="store_true")
     web.add_argument("--dir-wordlist", default=DEFAULT_DIRS_WORDLIST)
-    web.add_argument("--dir-threads",  type=int, default=50)
+    web.add_argument("--dir-threads",  type=int, default=150, help="Concurrent requests (default 150)")
     web.add_argument("--extensions",   default=None, help="e.g. .php,.txt,.bak")
+    web.add_argument("--recursive",    action="store_true", help="Recursive dir scan (like dirbuster -r)")
+    web.add_argument("--depth",        type=int, default=3, help="Recursion depth (default 3)")
+    web.add_argument("--base-path",    default="", help="Start scan from path e.g. /admin or /api/v1")
     web.add_argument("--param-paths",  default="/", help="Paths for param discovery, comma-separated")
+    web.add_argument("--vhost-domain", default="",  help="Base domain for vhost fuzzing (e.g. target.com)")
+    web.add_argument("--crawl-depth",  type=int, default=3, help="Crawler depth (default: 3)")
+    web.add_argument("--no-alive-check", action="store_true", help="Skip Wayback alive URL check")
 
     # ── Output ────────────────────────────────────────────────────────────────
     out = parser.add_argument_group("Output Options")
@@ -199,6 +217,7 @@ def main():
     if args.all:
         args.subdomains = args.ports = args.dirs = True
         args.fingerprint = args.js = args.sensitive = args.params = True
+        args.vhost = args.cors = args.crawl = args.wayback = args.api = args.vulns = True
         # CVE runs automatically after ports unless --no-cve
 
     if not any([args.subdomains, args.ports, args.dirs, args.fingerprint,
@@ -233,6 +252,12 @@ def main():
         "js_mining":      {},
         "sensitive_files":[],
         "parameters":     [],
+        "vhosts":         [],
+        "cors":           [],
+        "crawl":          {},
+        "wayback":        {},
+        "api":            {},
+        "vulnerabilities":{},
     }
 
     # ── 1. SUBDOMAIN ENUMERATION ─────────────────────────────────────────────
@@ -300,6 +325,9 @@ def main():
             use_https=use_https,
             extensions=extensions,
             concurrency=args.dir_threads,
+            recursive=args.recursive,
+            max_depth=args.depth,
+            base_path=args.base_path,
         )
         print_info(f"Directories/files found: {len(results['directories'])}")
 

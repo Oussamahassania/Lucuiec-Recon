@@ -1,158 +1,316 @@
-# 🔍 ReconTool — Educational Recon Framework
+<div align="center">
 
-> ⚠️ **For educational use ONLY. Only scan targets you have explicit permission to test.**  
-> Legal platforms: TryHackMe, HackTheBox, your own machines.
+# 🔍 Lucuiec-Recon
+
+### Ultimate Web Hacking Recon Framework
+
+![Python](https://img.shields.io/badge/Python-3.8+-blue?style=for-the-badge&logo=python)
+![Version](https://img.shields.io/badge/Version-3.0.0-red?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20Mac-orange?style=for-the-badge)
+
+> ⚠️ **For authorized use ONLY** — Bug Bounty · TryHackMe · HackTheBox · CTF Labs · Your own targets
+
+</div>
 
 ---
 
 ## 📦 Installation
 
+### One command install from GitHub
 ```bash
-# 1. Install system dependency (nmap)
-sudo apt install nmap -y        # Kali/Ubuntu/Debian
-# brew install nmap             # macOS
+pip install git+https://github.com/Oussamahassania/LucuiecRecon.git
+```
 
-# 2. Install Python dependencies
+### Run it from anywhere
+```bash
+lucuiec-recon -t 10.10.10.5 --all
+lucuiec-recon -t target.com --dirs --recursive
+lucuiec-recon --help
+```
+
+### Install for development (clone + edit)
+```bash
+git clone https://github.com/Oussamahassania/LucuiecRecon.git
+cd LucuiecRecon
+pip install -e .
+```
+
+### Kali Linux
+```bash
+git clone https://github.com/Oussamahassania/LucuiecRecon.git
+cd LucuiecRecon
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-
-# 3. Run it!
-python main.py --help
+python lucuiec_recon/main.py -t 10.10.10.5 --all
 ```
 
 ---
 
-## 🚀 Usage Examples
+## 🗂️ Project Structure
 
-### Full scan (all 3 modules)
-```bash
-python main.py -t 10.10.10.5 --all
+```
+LucuiecRecon/
+│
+├── lucuiec_recon/                ← Main package
+│   ├── __init__.py
+│   ├── main.py                   ← Entry point
+│   │
+│   ├── modules/
+│   │   ├── subdomain.py          ← 🌍 DNS brute-force + crt.sh passive recon
+│   │   ├── portscan.py           ← 🔌 TCP port scan + nmap service detection
+│   │   ├── dirscan.py            ← 📁 Dir brute-force + recursive + progress bar
+│   │   ├── fingerprint.py        ← 🖥️  Server / CMS / WAF / Framework detection
+│   │   ├── cve_lookup.py         ← 🔎 Auto CVE lookup from NVD API
+│   │   ├── js_miner.py           ← ⛏️  Extract secrets/endpoints from JS files
+│   │   ├── sensitive_files.py    ← 🔑 Hunt .env, backups, .git, configs
+│   │   ├── param_discovery.py    ← 🎯 GET + POST + JSON param fuzzing
+│   │   ├── vhost_fuzzer.py       ← 🌐 Virtual host discovery
+│   │   ├── cors_scanner.py       ← 🔀 CORS misconfiguration scanner
+│   │   ├── crawler.py            ← 🕷️  Full web crawler + URL/form extractor
+│   │   ├── wayback.py            ← 📼 Wayback Machine historical recon
+│   │   ├── api_fuzzer.py         ← 🔌 REST API endpoint + HTTP method fuzzer
+│   │   └── vuln_scanner.py       ← 💉 SQLi / XSS / LFI / Redirect / SSTI
+│   │
+│   ├── utils/
+│   │   ├── output.py             ← 🎨 Colored output + save results
+│   │   └── html_report.py        ← 📊 Dark-themed HTML report
+│   │
+│   └── wordlists/
+│       ├── subdomains.txt
+│       └── directories.txt
+│
+├── setup.py                      ← pip install config
+├── setup.cfg
+├── MANIFEST.in
+├── requirements.txt
+└── README.md
 ```
 
-### Subdomain enumeration only
+---
+
+## ⚡ Usage
+
+### Full scan — all 14 modules
 ```bash
-python main.py -t example.com --subdomains
+lucuiec-recon -t target.com --all
+lucuiec-recon -t 10.10.10.5 --all
 ```
 
-### Port scan — top common ports
+### Full scan with HTTPS
 ```bash
-python main.py -t 10.10.10.5 --ports
+lucuiec-recon -t target.com --all --https --web-port 443
 ```
 
-### Port scan — full range (all 65535 ports, slow but thorough)
+### Directory scan — with progress bar
 ```bash
-python main.py -t 10.10.10.5 --ports --port-range 1-65535
+# Basic
+lucuiec-recon -t lab.thm --dirs
+
+# Scan a specific path (e.g. target.com/admin)
+lucuiec-recon -t lab.thm --dirs --base-path /admin
+
+# Recursive mode — like dirbuster -r
+lucuiec-recon -t lab.thm --dirs --recursive
+
+# Recursive with depth limit
+lucuiec-recon -t lab.thm --dirs --recursive --depth 4
+
+# Custom wordlist + extensions
+lucuiec-recon -t lab.thm --dirs \
+  --dir-wordlist /usr/share/seclists/Discovery/Web-Content/common.txt \
+  --extensions .php,.txt,.bak,.zip
+
+# Ultra fast (300 threads)
+lucuiec-recon -t lab.thm --dirs --dir-threads 300
 ```
 
-### Port scan — specific ports only
+### Web crawler + URL finder
 ```bash
-python main.py -t 10.10.10.5 --ports --port-range 22,80,443,8080,8443
+lucuiec-recon -t target.com --crawl
+lucuiec-recon -t target.com --crawl --crawl-depth 5
 ```
 
-### Directory scan on default port 80
+### Vulnerability scan (SQLi, XSS, LFI, Redirect)
 ```bash
-python main.py -t 10.10.10.5 --dirs
+# Best: crawl first to find URLs, then scan them
+lucuiec-recon -t target.com --crawl --vulns
 ```
 
-### Directory scan on custom port (e.g. 8080)
+### CORS misconfiguration scan
 ```bash
-python main.py -t 10.10.10.5 --dirs --web-port 8080
+lucuiec-recon -t target.com --cors --vhost-domain target.com
 ```
 
-### Directory scan with HTTPS
+### Virtual host fuzzing
 ```bash
-python main.py -t 10.10.10.5 --dirs --https --web-port 443
+lucuiec-recon -t 10.10.10.5 --vhost --vhost-domain target.com
 ```
 
-### Directory scan with specific extensions
+### API endpoint fuzzer
 ```bash
-python main.py -t 10.10.10.5 --dirs --extensions ".php,.txt,.bak,.zip"
+lucuiec-recon -t target.com --api
 ```
 
-### Fast scan (skip nmap service detection)
+### Wayback Machine — passive recon
 ```bash
-python main.py -t 10.10.10.5 --ports --dirs --no-nmap
+lucuiec-recon -t target.com --wayback --vhost-domain target.com
 ```
 
-### Custom wordlists (recommended: use SecLists)
+### Parameter discovery (GET + POST + JSON)
 ```bash
-python main.py -t 10.10.10.5 --all \
+lucuiec-recon -t target.com --params
+```
+
+### Subdomain enumeration
+```bash
+# With built-in wordlist
+lucuiec-recon -t target.com --subdomains
+
+# With SecLists
+lucuiec-recon -t target.com --subdomains \
+  --sub-wordlist /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt
+```
+
+### Port scan + service detection
+```bash
+lucuiec-recon -t 10.10.10.5 --ports
+lucuiec-recon -t 10.10.10.5 --ports --port-range 1-65535
+```
+
+### Skip connectivity check (VPN issues)
+```bash
+lucuiec-recon -t 10.10.10.5 --all --force
+```
+
+### Save results to custom directory
+```bash
+lucuiec-recon -t target.com --all -o /tmp/myrecon
+```
+
+---
+
+## 🧠 All 14 Modules
+
+| # | Module | Description |
+|---|--------|-------------|
+| 1 | **Subdomain** | crt.sh passive + DNS brute-force |
+| 2 | **Port Scan** | TCP scan + banner grab + nmap -sV -sC |
+| 3 | **Dir Scan** | Async brute-force + recursive + live progress bar |
+| 4 | **Fingerprint** | Server / CMS / WAF / Framework detection |
+| 5 | **CVE Lookup** | Maps service versions → CVEs via NVD API |
+| 6 | **JS Miner** | Extracts API keys, JWT tokens, endpoints from JS |
+| 7 | **Sensitive Files** | 100+ patterns: .env, .git, backups, SSH keys |
+| 8 | **Param Discovery** | GET + POST + JSON fuzzing, reflection detection |
+| 9 | **VHost Fuzzer** | Finds hidden virtual hosts via Host header |
+| 10 | **CORS Scanner** | Detects CRITICAL misconfigs — account takeover |
+| 11 | **Web Crawler** | URLs, forms, comments, emails, API paths, secrets |
+| 12 | **Wayback Machine** | Historical URLs — finds deleted admin panels |
+| 13 | **API Fuzzer** | 100 paths × 7 HTTP methods + Swagger detection |
+| 14 | **Vuln Scanner** | SQLi, XSS, LFI, Open Redirect, SSTI |
+
+---
+
+## 🎯 Best Combinations
+
+### TryHackMe / HackTheBox machine
+```bash
+# Full scan
+lucuiec-recon -t 10.10.10.5 --all --vhost-domain target.thm
+
+# Web focused
+lucuiec-recon -t 10.10.10.5 --dirs --fingerprint --crawl --api --vulns
+
+# Quick dir scan on a specific path
+lucuiec-recon -t 10.10.10.5 --dirs --base-path /secret --recursive
+```
+
+### Bug Bounty
+```bash
+# Maximum passive recon first (no touching the target)
+lucuiec-recon -t target.com --subdomains --wayback --vhost-domain target.com
+
+# Then active
+lucuiec-recon -t target.com --all --vhost-domain target.com \
   --sub-wordlist /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt \
   --dir-wordlist /usr/share/seclists/Discovery/Web-Content/common.txt
 ```
 
----
-
-## 📁 Project Structure
-
-```
-recon_tool/
-├── main.py              ← CLI entry point (start here)
-├── requirements.txt
-├── modules/
-│   ├── subdomain.py     ← DNS brute-force + crt.sh passive recon
-│   ├── portscan.py      ← TCP socket scan + nmap service detection
-│   └── dirscan.py       ← Async HTTP directory brute-force
-├── utils/
-│   └── output.py        ← Colored output + JSON/TXT report saving
-├── wordlists/
-│   ├── subdomains.txt   ← Mini bundled list (replace with SecLists)
-│   └── directories.txt  ← Mini bundled list (replace with SecLists)
-└── results/             ← Scan reports saved here (auto-created)
-```
-
----
-
-## 🧠 What Each Module Teaches You
-
-### Module 1 — Subdomain Enumeration (`subdomain.py`)
-- **DNS resolution** using `dnspython` — how domains map to IPs
-- **Passive OSINT** via crt.sh API — certificate transparency logs
-- **Active brute-forcing** — trying common subdomain names via DNS
-- **Threading** with `concurrent.futures` for speed
-
-### Module 2 — Port Scanning (`portscan.py`)
-- **Raw TCP socket scanning** — how `connect_ex()` detects open ports
-- **Banner grabbing** — reading what services announce on connection
-- **nmap integration** via `python-nmap` for `-sV` version detection
-- **Semaphore/threading** patterns for concurrent scanning
-
-### Module 3 — Directory Discovery (`dirscan.py`)
-- **HTTP status codes** — 200 (found), 403 (forbidden), 301 (redirect)
-- **Async HTTP** with `httpx` + `asyncio` for high-speed scanning
-- **Extension fuzzing** — trying .php, .txt, .bak on each word
-- **Semaphore limiting** to avoid overwhelming the target
-
----
-
-## 📚 Upgrade Your Wordlists (Highly Recommended)
-
-Install SecLists for much better coverage:
+### Pure web attack surface
 ```bash
-sudo apt install seclists
-# Or: git clone https://github.com/danielmiessler/SecLists
+lucuiec-recon -t target.com --crawl --api --cors --params --vulns \
+  --vhost-domain target.com --crawl-depth 5
 ```
-
-Then use:
-- Subdomains: `/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt`
-- Directories: `/usr/share/seclists/Discovery/Web-Content/common.txt`
-- Big dirs: `/usr/share/seclists/Discovery/Web-Content/big.txt`
 
 ---
 
-## 📊 Output
+## 📊 Output Files
 
-Results are saved to `results/` directory:
-- `<target>_<timestamp>.json` — Full machine-readable results
-- `<target>_<timestamp>.txt` — Human-readable summary report
+Every scan auto-saves to `results/`:
+
+| File | Contents |
+|------|----------|
+| `target_timestamp.json` | Full structured data — all findings |
+| `target_timestamp.txt` | Human-readable text summary |
+| `target_timestamp_report.html` | Dark-themed HTML report |
+
+---
+
+## 🎨 Output Color Guide
+
+| Color | Prefix | Meaning |
+|-------|--------|---------|
+| 🔴 Red Bold | `[!!!]` | Critical — exploit this first |
+| 🟢 Green | `[+]` | Found — noteworthy item |
+| 🔵 Blue | `[*]` | Info — general output |
+| 🟡 Yellow | `[-]` | Warning — investigate manually |
+| 🔴 Red | `[!]` | Error |
+
+---
+
+## 📋 Requirements
+
+```
+python >= 3.8
+httpx >= 0.25.0
+requests >= 2.31.0
+dnspython >= 2.4.0
+colorama >= 0.4.6
+python-nmap >= 0.7.1
+nmap (system package)
+```
+
+Install system nmap:
+```bash
+sudo apt install nmap -y       # Kali / Debian
+brew install nmap              # macOS
+```
 
 ---
 
 ## ⚖️ Legal Notice
 
-This tool is for **educational and authorized penetration testing only**.  
-Unauthorized scanning is illegal under the Computer Fraud and Abuse Act (CFAA) and equivalent laws worldwide.
+This tool is for **authorized penetration testing and security research only.**
 
-**Safe practice environments:**
-- [TryHackMe](https://tryhackme.com)
-- [HackTheBox](https://hackthebox.com)
-- Your own VMs/lab network
+Running this against systems you don't own or have **explicit written permission** to test is **illegal** and may result in criminal prosecution.
+
+**Safe environments:**
+
+[![TryHackMe](https://img.shields.io/badge/TryHackMe-red?style=flat-square)](https://tryhackme.com)
+[![HackTheBox](https://img.shields.io/badge/HackTheBox-green?style=flat-square)](https://hackthebox.com)
+[![VulnHub](https://img.shields.io/badge/VulnHub-blue?style=flat-square)](https://vulnhub.com)
+[![BugCrowd](https://img.shields.io/badge/BugCrowd-orange?style=flat-square)](https://bugcrowd.com)
+[![HackerOne](https://img.shields.io/badge/HackerOne-white?style=flat-square)](https://hackerone.com)
+
+---
+
+## 👤 Author
+
+**Oussamahassania** — [@Oussamahassania](https://github.com/Oussamahassania)
+
+---
+
+<div align="center">
+⭐ Star this repo if it helped you!
+</div>

@@ -11,7 +11,7 @@ All from HTTP headers + HTML body analysis — no external API needed.
 
 import httpx
 import re
-from utils.output import print_found, print_info, print_error, print_warn
+from lucuiec_recon.utils.output import print_found, print_info, print_error, print_warn
 
 # ─── Fingerprint Signatures ───────────────────────────────────────────────────
 

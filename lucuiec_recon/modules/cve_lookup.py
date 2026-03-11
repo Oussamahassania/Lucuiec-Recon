@@ -7,7 +7,7 @@ This is what makes your tool unique — no common recon tool does this automatic
 
 import requests
 import time
-from utils.output import print_found, print_info, print_error, print_warn
+from lucuiec_recon.utils.output import print_found, print_info, print_error, print_warn
 
 NVD_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 

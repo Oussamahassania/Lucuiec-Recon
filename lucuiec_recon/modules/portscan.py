@@ -7,7 +7,7 @@ import socket
 import concurrent.futures
 import threading
 import nmap
-from utils.output import print_found, print_info, print_error
+from lucuiec_recon.utils.output import print_found, print_info, print_error
 
 _lock = threading.Lock()
 
