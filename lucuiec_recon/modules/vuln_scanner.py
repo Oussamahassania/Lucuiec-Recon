@@ -12,9 +12,10 @@ Not a replacement for Burp Suite — finds low-hanging fruit automatically.
 
 import httpx
 import asyncio
+import re
 import time
 import threading
-from lucuiec_recon.utils.output import print_info, print_warn, print_critical
+from lucuiec_recon.utils.output import print_found, print_info, print_warn, print_critical
 
 _lock = threading.Lock()
 
@@ -318,16 +319,31 @@ def run(target: str, port: int = 80, use_https: bool = False,
     print_warn("Scanning for: SQLi, XSS, LFI, Open Redirect, SSTI")
 
     all_results = []
-
-    # Extract URLs with parameters from crawl results
     urls_to_test = []
-    if urls:
-        urls_to_test = extract_params_from_urls(urls)
-        print_info(f"Testing {len(urls_to_test)} URLs with parameters")
 
-    # Always test the base URL
+    # 1. Extract URLs that already have GET parameters
+    if urls:
+        param_urls = extract_params_from_urls(urls)
+        urls_to_test.extend(param_urls)
+        print_info(f"Found {len(param_urls)} crawled URLs with parameters")
+
+        # 2. Also inject common params into ALL crawled pages (php/html pages)
+        #    e.g. operatives.php → operatives.php?id=1  operatives.php?search=x
+        injectable_params = {"id": "1", "search": "test", "page": "1",
+                             "cat": "1", "name": "test", "q": "test",
+                             "file": "index", "view": "home", "lang": "en"}
+        for crawled_url in (urls or []):
+            # Only inject into .php, .asp, .aspx pages and paths without extension
+            if any(ext in crawled_url for ext in [".php", ".asp", ".aspx"]) or                ("?" not in crawled_url and "." not in crawled_url.split("/")[-1]):
+                if "?" not in crawled_url:
+                    urls_to_test.append({"url": crawled_url, "params": injectable_params})
+        print_info(f"Total URLs to test: {len(urls_to_test)}")
+
+    # 3. Always test the base URL with common params
     urls_to_test.append({"url": f"{base_url}/?id=1", "params": {"id": "1"}})
     urls_to_test.append({"url": f"{base_url}/?search=test", "params": {"search": "test"}})
+    urls_to_test.append({"url": f"{base_url}/?page=1", "params": {"page": "1"}})
+    urls_to_test.append({"url": f"{base_url}/?file=index", "params": {"file": "index"}})
 
     try:
         results = asyncio.run(_async_vuln_scan(urls_to_test, concurrency))
