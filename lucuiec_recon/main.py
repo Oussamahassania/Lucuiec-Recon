@@ -365,6 +365,68 @@ def main():
             use_https=use_https,
         )
 
+    # ── 9. VHOST FUZZING ─────────────────────────────────────────────────────
+    if args.vhost:
+        print_section("🌐 MODULE 9: VIRTUAL HOST FUZZING")
+        results["vhosts"] = vhost_module.run(
+            target=target,
+            domain=args.vhost_domain or target,
+            port=args.web_port,
+            use_https=use_https,
+        )
+
+    # ── 10. CORS SCANNER ─────────────────────────────────────────────────────
+    if args.cors:
+        print_section("🔀 MODULE 10: CORS MISCONFIGURATION SCANNER")
+        results["cors"] = cors_module.run(
+            target=target,
+            port=args.web_port,
+            use_https=use_https,
+            domain=args.vhost_domain or target,
+        )
+
+    # ── 11. WEB CRAWLER ──────────────────────────────────────────────────────
+    if args.crawl:
+        print_section("🕷️  MODULE 11: WEB CRAWLER & URL FINDER")
+        results["crawl"] = crawler_module.run(
+            target=target,
+            port=args.web_port,
+            use_https=use_https,
+            max_depth=args.crawl_depth,
+        )
+
+    # ── 12. WAYBACK MACHINE ──────────────────────────────────────────────────
+    if args.wayback:
+        print_section("📼 MODULE 12: WAYBACK MACHINE")
+        domain = args.vhost_domain or (target if not target.replace(".","").isdigit() else "")
+        if domain:
+            results["wayback"] = wayback_module.run(
+                domain=domain,
+                check_alive=not args.no_alive_check,
+            )
+        else:
+            print_warn("Wayback Machine needs a domain name, not an IP. Use --vhost-domain example.com")
+
+    # ── 13. API FUZZER ────────────────────────────────────────────────────────
+    if args.api:
+        print_section("🔌 MODULE 13: API ENDPOINT FUZZER")
+        results["api"] = api_module.run(
+            target=target,
+            port=args.web_port,
+            use_https=use_https,
+        )
+
+    # ── 14. VULNERABILITY SCANNER ────────────────────────────────────────────
+    if args.vulns:
+        print_section("💉 MODULE 14: VULNERABILITY SCANNER")
+        crawled_urls = results.get("crawl", {}).get("urls", [])
+        results["vulnerabilities"] = vuln_module.run(
+            target=target,
+            port=args.web_port,
+            use_https=use_https,
+            urls=crawled_urls,
+        )
+
     # ── SUMMARY & SAVE ────────────────────────────────────────────────────────
     print_summary(results)
 
