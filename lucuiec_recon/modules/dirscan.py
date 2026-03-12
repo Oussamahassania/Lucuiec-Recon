@@ -17,7 +17,7 @@ import threading
 import sys
 import time
 from urllib.parse import urljoin
-from utils.output import print_found, print_info, print_error, print_warn
+from lucuiec_recon.utils.output import print_found, print_info, print_error, print_warn
 
 _lock          = threading.Lock()
 _counter_lock  = threading.Lock()

@@ -221,8 +221,12 @@ def main():
         args.vhost = args.cors = args.crawl = args.wayback = args.api = args.vulns = True
         # CVE runs automatically after ports unless --no-cve
 
-    if not any([args.subdomains, args.ports, args.dirs, args.fingerprint,
-                args.js, args.sensitive, args.params, args.cve]):
+    if not any([
+        args.subdomains, args.ports, args.dirs, args.fingerprint,
+        args.js, args.sensitive, args.params, args.cve,
+        args.vhost, args.cors, args.crawl,
+        args.wayback, args.api, args.vulns,
+    ]):
         print_error("No module selected! Use --all or pick modules. Run --help for examples.")
         sys.exit(1)
 
